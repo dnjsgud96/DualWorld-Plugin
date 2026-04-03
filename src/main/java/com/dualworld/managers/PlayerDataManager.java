@@ -58,6 +58,19 @@ public class PlayerDataManager {
         saveState(p, cfg, "speedrun");
         saveCfg(p, cfg);
     }
+
+    /**
+     * 스피드런 데이터를 초기화(빈 상태로 덮어쓰기)합니다.
+     * 플레이어가 스피드런 월드에서 사망했을 때 호출하여
+     * 다음에 스피드런에 재입장해도 아이템이 남지 않도록 합니다.
+     */
+    public void clearSpeedrunData(Player p) {
+        FileConfiguration cfg = getCfg(p);
+        cfg.set("speedrun", null); // 스피드런 섹션 전체 삭제
+        saveCfg(p, cfg);
+        plugin.getLogger().info("[DualWorld] " + p.getName() + " 스피드런 데이터 초기화 완료");
+    }
+
     public void loadSpeedrunData(Player p) {
         FileConfiguration cfg = getCfg(p);
         applyState(p, cfg, "speedrun");
