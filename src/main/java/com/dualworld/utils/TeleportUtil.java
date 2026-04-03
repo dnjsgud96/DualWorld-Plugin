@@ -52,6 +52,8 @@ public class TeleportUtil {
         pdm.saveHealingData(p);
         pdm.loadSpeedrunData(p);
 
+        // 스피드런 데이터가 초기화된 상태(사망 후)라면 스폰으로 이동
+        // getLastSpeedrunLocation()이 null을 반환하면 resetToDefault가 이미 적용됨
         Location dest = pdm.getLastSpeedrunLocation(p);
         if (dest == null || dest.getWorld() == null || !dest.getWorld().getName().contains(wm.getSpeedrunWorldName()))
             dest = sw.getSpawnLocation();
