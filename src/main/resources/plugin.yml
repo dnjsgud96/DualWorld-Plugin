@@ -1,0 +1,26 @@
+name: DualWorld
+version: 1.0.0
+main: com.dualworld.DualWorldPlugin
+api-version: 1.12
+description: Healing world and Speedrun world manager
+author: DualWorld
+
+commands:
+  dualworld:
+    description: DualWorld main command
+    usage: /dualworld <subcommand>
+    aliases: [dw]
+  healing:
+    description: Move to healing world
+    usage: /healing
+  speedrun:
+    description: Move to speedrun world
+    usage: /speedrun
+
+permissions:
+  dualworld.admin:
+    description: Admin permissions for DualWorld
+    default: op
+  dualworld.use:
+    description: Use DualWorld commands
+    default: true
