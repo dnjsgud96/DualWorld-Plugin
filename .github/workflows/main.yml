@@ -5,7 +5,6 @@ on:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
-  # 수동 실행도 가능하게
   workflow_dispatch:
 
 jobs:
@@ -13,32 +12,27 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. 코드 체크아웃
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      # 2. Java 8 설정 (Paper 1.12.1 호환)
       - name: Set up Java 8
-        uses: actions/setup-java@v3
+        uses: actions/setup-java@v4
         with:
           java-version: '8'
           distribution: 'temurin'
 
-      # 3. Maven 캐시 (빌드 속도 향상)
       - name: Cache Maven packages
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.m2
           key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-m2
 
-      # 4. Maven 빌드
       - name: Build with Maven
         run: mvn clean package -B
 
-      # 5. 빌드된 jar 업로드 (다운로드 가능하게)
       - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: DualWorld-jar
           path: target/DualWorld-*.jar
