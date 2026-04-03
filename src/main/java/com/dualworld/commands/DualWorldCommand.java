@@ -289,9 +289,9 @@ public class DualWorldCommand implements CommandExecutor {
         p.sendMessage("§7서버 최고기록: " + StatsManager.formatTime(sm.getGlobalBestTime()));
         p.sendMessage("§8§m──────────────────────────────────────");
 
-        // [복사하기] 클릭 버튼 — copy_to_clipboard 액션
+        // [복사하기] 클릭 버튼 — SUGGEST_COMMAND 액션
         TextComponent copyBtn = new TextComponent("  §a§l[ 📋 복사하기 ]");
-        copyBtn.setClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, copyText));
+        copyBtn.setClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, copyText));
         copyBtn.setHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
                 new ComponentBuilder("§a클릭하면 전체 통계가 클립보드에 복사됩니다!\n§7디스코드, 메모장 등에 붙여넣기 하세요.").create()));
 
