@@ -16,12 +16,10 @@ public class PlayerQuitListener implements Listener {
 
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
-        Player player = event.getPlayer();
-        String worldType = plugin.getPlayerDataManager().getCurrentWorld(player);
-        if ("speedrun".equals(worldType)) {
-            plugin.getPlayerDataManager().saveSpeedrunData(player);
-        } else {
-            plugin.getPlayerDataManager().saveHealingData(player);
-        }
+        Player p = event.getPlayer();
+        if ("speedrun".equals(plugin.getPlayerDataManager().getCurrentWorld(p)))
+            plugin.getPlayerDataManager().saveSpeedrunData(p);
+        else
+            plugin.getPlayerDataManager().saveHealingData(p);
     }
 }

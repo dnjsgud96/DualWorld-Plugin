@@ -1,5 +1,3 @@
-# DualWorld Configuration
-
 healing-world:
   name: "world"
   difficulty: NORMAL
@@ -10,12 +8,13 @@ speedrun-world:
   difficulty: HARD
   display-name: "§c스피드런 월드"
   seed: 0
+  death-reset-delay: 5
 
 messages:
   prefix: "§8[§aDualWorld§8] "
   moved-to-healing: "§a힐링 월드로 이동했습니다!"
   moved-to-speedrun: "§c스피드런 월드로 이동했습니다!"
-  world-reset: "§c스피드런 월드가 리셋되었습니다! 새로운 시드: {seed}"
-  player-died: "§c{player}님이 스피드런 월드에서 사망했습니다. 월드를 리셋합니다!"
+  world-reset: "§c스피드런 월드가 리셋되었습니다! 새 시드: {seed}"
+  player-died: "§c{player}님이 스피드런 월드에서 사망! §e{delay}초 후 월드가 리셋됩니다!"
   no-permission: "§c권한이 없습니다."
   already-in-world: "§e이미 해당 월드에 있습니다."

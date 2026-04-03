@@ -1,7 +1,6 @@
 package com.dualworld.listeners;
 
 import com.dualworld.DualWorldPlugin;
-import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -19,23 +18,20 @@ public class PlayerDeathListener implements Listener {
     @EventHandler(priority = EventPriority.HIGH)
     public void onPlayerDeath(PlayerDeathEvent event) {
         Player player = event.getEntity();
-
         if (!plugin.getWorldManager().isInSpeedrunWorld(player)) return;
 
-        // Keep drops in the world (natural death behavior)
-        String deathMsg = event.getDeathMessage();
-        if (deathMsg == null) deathMsg = player.getName() + "님이 사망했습니다.";
+        // Mark as pending respawn — we'll intercept the respawn event
+        plugin.getWorldManager().addPendingRespawn(player.getUniqueId());
 
-        final String finalMsg = deathMsg;
-        Bukkit.broadcastMessage(plugin.getMessage("player-died", "{player}", player.getName()));
+        // Record death stat
+        plugin.getStatsManager().recordSpeedrunDeath(player);
 
-        // Clear drops so items don't scatter (speedrun reset = fresh start)
-        event.getDrops().clear();
+        // Keep drops in world naturally; clear exp so it doesn't scatter
         event.setDroppedExp(0);
 
-        // Delay reset so death event finishes first
-        Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            plugin.getWorldManager().resetSpeedrunWorld();
-        }, 20L);
+        // Trigger countdown reset (only if not already resetting)
+        if (!plugin.getWorldManager().isResetInProgress()) {
+            plugin.getWorldManager().triggerResetWithCountdown(player.getName());
+        }
     }
 }

@@ -16,16 +16,20 @@ public class PlayerJoinListener implements Listener {
 
     @EventHandler
     public void onPlayerJoin(PlayerJoinEvent event) {
-        Player player = event.getPlayer();
-        plugin.getPlayerDataManager().onPlayerJoin(player);
+        Player p = event.getPlayer();
+        plugin.getPlayerDataManager().onPlayerJoin(p);
 
-        String worldType = plugin.getPlayerDataManager().getCurrentWorld(player);
-        String displayName;
-        if ("speedrun".equals(worldType)) {
-            displayName = plugin.getWorldManager().getSpeedrunDisplayName();
-        } else {
-            displayName = plugin.getWorldManager().getHealingDisplayName();
+        boolean inSpeedrun = plugin.getWorldManager().isInSpeedrunWorld(p);
+        String displayName = inSpeedrun
+                ? plugin.getWorldManager().getSpeedrunDisplayName()
+                : plugin.getWorldManager().getHealingDisplayName();
+
+        p.sendMessage(plugin.getPrefix() + "§e현재 위치: " + displayName);
+
+        // If joining speedrun world and timer not started yet, start it
+        if (inSpeedrun && !plugin.getTimerManager().isRunning()) {
+            plugin.getTimerManager().startTimer();
+            plugin.getStatsManager().recordSpeedrunJoin(p);
         }
-        player.sendMessage(plugin.getPrefix() + "§e현재 위치: " + displayName);
     }
 }
