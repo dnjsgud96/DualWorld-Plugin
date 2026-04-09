@@ -29,11 +29,6 @@ public class PlayerDeathListener implements Listener {
         // Keep drops in world naturally; clear exp so it doesn't scatter
         event.setDroppedExp(0);
 
-        // ★ 핵심 수정: 사망 시점에 스피드런 데이터를 빈 상태로 초기화
-        // 이렇게 해야 나중에 다시 스피드런 입장 시 loadSpeedrunData()가
-        // 빈 데이터를 읽어 인벤토리/스탯을 초기화(resetToDefault)합니다.
-        plugin.getPlayerDataManager().clearSpeedrunData(player);
-
         // Trigger countdown reset (only if not already resetting)
         if (!plugin.getWorldManager().isResetInProgress()) {
             plugin.getWorldManager().triggerResetWithCountdown(player.getName());

@@ -3,6 +3,7 @@ package com.dualworld.managers;
 import com.dualworld.DualWorldPlugin;
 import org.bukkit.*;
 import org.bukkit.entity.Player;
+import org.bukkit.scheduler.BukkitRunnable;
 
 import java.io.File;
 import java.io.IOException;
@@ -26,6 +27,7 @@ public class WorldManager {
         healingWorldName  = plugin.getConfig().getString("healing-world.name", "world");
         speedrunWorldName = plugin.getConfig().getString("speedrun-world.name", "speedrun_world");
         currentSpeedrunSeed = plugin.getConfig().getLong("speedrun-world.seed", 0L);
+
         if (currentSpeedrunSeed == 0L) {
             currentSpeedrunSeed = new Random().nextLong();
             plugin.getConfig().set("speedrun-world.seed", currentSpeedrunSeed);
@@ -33,6 +35,9 @@ public class WorldManager {
         }
     }
 
+    // ─────────────────────────────────────────────
+    // 월드 초기화
+    // ─────────────────────────────────────────────
     public void initializeWorlds() {
         World hw = Bukkit.getWorld(healingWorldName);
         if (hw == null) {
@@ -40,33 +45,54 @@ public class WorldManager {
             healingWorldName = Bukkit.getWorlds().get(0).getName();
             hw = Bukkit.getWorlds().get(0);
         }
+
         String diffStr = plugin.getConfig().getString("healing-world.difficulty", "NORMAL");
-        try { hw.setDifficulty(Difficulty.valueOf(diffStr.toUpperCase())); }
-        catch (IllegalArgumentException e) { hw.setDifficulty(Difficulty.NORMAL); }
+        try {
+            hw.setDifficulty(Difficulty.valueOf(diffStr.toUpperCase()));
+        } catch (IllegalArgumentException e) {
+            hw.setDifficulty(Difficulty.NORMAL);
+        }
 
         World sw = Bukkit.getWorld(speedrunWorldName);
-        if (sw == null) sw = createSpeedrunWorld(currentSpeedrunSeed);
+        if (sw == null) {
+            sw = createSpeedrunWorld(currentSpeedrunSeed);
+        }
         if (sw != null) sw.setDifficulty(Difficulty.HARD);
 
         plugin.getLogger().info("월드 초기화 완료");
     }
 
+    // ─────────────────────────────────────────────
+    // 스피드런 월드 생성 (안정성 개선)
+    // ─────────────────────────────────────────────
     public World createSpeedrunWorld(long seed) {
         plugin.getLogger().info("스피드런 월드 생성 중... 시드: " + seed);
 
+        // Overworld
         WorldCreator ow = new WorldCreator(speedrunWorldName);
-        ow.seed(seed); ow.environment(World.Environment.NORMAL); ow.type(WorldType.NORMAL);
+        ow.seed(seed);
+        ow.environment(World.Environment.NORMAL);
+        ow.type(WorldType.NORMAL);
         World world = ow.createWorld();
-        if (world == null) return null;
-        world.setDifficulty(Difficulty.HARD);
 
+        if (world != null) {
+            world.setDifficulty(Difficulty.HARD);
+            Location spawn = new Location(world, 0, world.getHighestBlockYAt(0, 0), 0);
+            world.setSpawnLocation(spawn);
+            world.getChunkAt(spawn).load(true); // 스폰 청크 미리 로드
+        }
+
+        // Nether
         WorldCreator nw = new WorldCreator(speedrunWorldName + "_nether");
-        nw.seed(seed); nw.environment(World.Environment.NETHER);
+        nw.seed(seed);
+        nw.environment(World.Environment.NETHER);
         World nether = nw.createWorld();
         if (nether != null) nether.setDifficulty(Difficulty.HARD);
 
+        // End
         WorldCreator ew = new WorldCreator(speedrunWorldName + "_the_end");
-        ew.seed(seed); ew.environment(World.Environment.THE_END);
+        ew.seed(seed);
+        ew.environment(World.Environment.THE_END);
         World end = ew.createWorld();
         if (end != null) end.setDifficulty(Difficulty.HARD);
 
@@ -74,6 +100,9 @@ public class WorldManager {
         return world;
     }
 
+    // ─────────────────────────────────────────────
+    // 리셋 트리거
+    // ─────────────────────────────────────────────
     public void triggerResetWithCountdown(String killerName) {
         if (resetInProgress) return;
         resetInProgress = true;
@@ -84,88 +113,127 @@ public class WorldManager {
 
         for (int i = delay; i >= 1; i--) {
             final int sec = i;
-            long tickDelay = (long)(delay - i) * 20L;
+            long tickDelay = (long) (delay - i) * 20L;
             Bukkit.getScheduler().runTaskLater(plugin, () ->
-                Bukkit.broadcastMessage(plugin.getPrefix() + "§c월드 리셋까지 §e" + sec + "§c초..."),
-                tickDelay);
+                    Bukkit.broadcastMessage(plugin.getPrefix() + "§c월드 리셋까지 §e" + sec + "§c초..."),
+                    tickDelay);
         }
+
         Bukkit.getScheduler().runTaskLater(plugin, this::doReset, (long) delay * 20L);
     }
 
+    // ─────────────────────────────────────────────
+    // 리셋 실행
+    // ─────────────────────────────────────────────
     private void doReset() {
         plugin.getLogger().info("스피드런 월드 리셋 실행!");
         plugin.getTimerManager().stopTimer();
 
         World hw = getHealingWorld();
+
         for (Player p : Bukkit.getOnlinePlayers()) {
             if (isInSpeedrunWorld(p) || pendingRespawn.contains(p.getUniqueId())) {
                 plugin.getPlayerDataManager().saveSpeedrunData(p);
                 plugin.getPlayerDataManager().loadHealingData(p);
+
                 Location dest = plugin.getPlayerDataManager().getLastHealingLocation(p);
-                if (dest == null || dest.getWorld() == null) dest = hw.getSpawnLocation();
+                if (dest == null || dest.getWorld() == null)
+                    dest = hw.getSpawnLocation();
+
                 p.teleport(dest);
                 plugin.getPlayerDataManager().setCurrentWorld(p, "healing");
-                p.sendMessage(plugin.getPrefix() + "§c스피드런 월드가 리셋되어 힐링 월드로 이동됩니다.");
+                p.sendMessage(plugin.getPrefix() +
+                        "§c스피드런 월드가 리셋되어 힐링 월드로 이동됩니다.");
             }
         }
         pendingRespawn.clear();
-        unloadAndDelete();
 
-        currentSpeedrunSeed = new Random().nextLong();
-        plugin.getConfig().set("speedrun-world.seed", currentSpeedrunSeed);
-        plugin.saveConfig();
-
+        // 월드 언로드 후 삭제를 지연 실행
         Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            createSpeedrunWorld(currentSpeedrunSeed);
-            Bukkit.broadcastMessage(plugin.getMessage("world-reset",
-                    "{seed}", String.valueOf(currentSpeedrunSeed)));
-            resetInProgress = false;
-            plugin.getStatsManager().incrementWorldResets();
-        }, 60L);
+            unloadAndDelete();
+
+            currentSpeedrunSeed = new Random().nextLong();
+            plugin.getConfig().set("speedrun-world.seed", currentSpeedrunSeed);
+            plugin.saveConfig();
+
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                createSpeedrunWorld(currentSpeedrunSeed);
+                Bukkit.broadcastMessage(plugin.getMessage("world-reset",
+                        "{seed}", String.valueOf(currentSpeedrunSeed)));
+                resetInProgress = false;
+                plugin.getStatsManager().incrementWorldResets();
+            }, 100L); // 충분한 지연 후 생성
+        }, 40L);
     }
 
+    // ─────────────────────────────────────────────
+    // 월드 언로드 및 삭제
+    // ─────────────────────────────────────────────
     private void unloadAndDelete() {
-        String[] names = {speedrunWorldName, speedrunWorldName + "_nether", speedrunWorldName + "_the_end"};
+        String[] names = {
+                speedrunWorldName,
+                speedrunWorldName + "_nether",
+                speedrunWorldName + "_the_end"
+        };
+
         for (String name : names) {
             World w = Bukkit.getWorld(name);
-            if (w != null) Bukkit.unloadWorld(w, false);
+            if (w != null) {
+                Bukkit.unloadWorld(w, false);
+                plugin.getLogger().info("월드 언로드: " + name);
+            }
+
             File folder = new File(Bukkit.getWorldContainer(), name);
-            if (folder.exists()) deleteDir(folder);
+            if (folder.exists()) {
+                deleteDir(folder);
+                plugin.getLogger().info("월드 폴더 삭제: " + name);
+            }
         }
     }
 
     private void deleteDir(File dir) {
         try {
             Files.walkFileTree(dir.toPath(), new SimpleFileVisitor<Path>() {
-                @Override public FileVisitResult visitFile(Path f, BasicFileAttributes a) throws IOException {
-                    Files.delete(f); return FileVisitResult.CONTINUE; }
-                @Override public FileVisitResult postVisitDirectory(Path d, IOException e) throws IOException {
-                    Files.delete(d); return FileVisitResult.CONTINUE; }
+                @Override
+                public FileVisitResult visitFile(Path f, BasicFileAttributes a) throws IOException {
+                    Files.delete(f);
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult postVisitDirectory(Path d, IOException e) throws IOException {
+                    Files.delete(d);
+                    return FileVisitResult.CONTINUE;
+                }
             });
         } catch (IOException e) {
             plugin.getLogger().log(Level.WARNING, "폴더 삭제 실패: " + dir.getName(), e);
         }
     }
 
-    public void addPendingRespawn(UUID uuid)    { pendingRespawn.add(uuid); }
-    public boolean isPendingRespawn(UUID uuid)  { return pendingRespawn.contains(uuid); }
+    // ─────────────────────────────────────────────
+    // 유틸 메서드
+    // ─────────────────────────────────────────────
+    public void addPendingRespawn(UUID uuid) { pendingRespawn.add(uuid); }
+    public boolean isPendingRespawn(UUID uuid) { return pendingRespawn.contains(uuid); }
     public void removePendingRespawn(UUID uuid) { pendingRespawn.remove(uuid); }
 
     public boolean isInSpeedrunWorld(Player p) {
         String n = p.getWorld().getName();
-        return n.equals(speedrunWorldName) || n.equals(speedrunWorldName + "_nether") || n.equals(speedrunWorldName + "_the_end");
+        return n.equals(speedrunWorldName)
+                || n.equals(speedrunWorldName + "_nether")
+                || n.equals(speedrunWorldName + "_the_end");
     }
-    public boolean isInHealingWorld(Player p)  { return !isInSpeedrunWorld(p); }
-    public boolean isResetInProgress()         { return resetInProgress; }
+
+    public boolean isResetInProgress() { return resetInProgress; }
 
     public World getHealingWorld() {
         World w = Bukkit.getWorld(healingWorldName);
         return w != null ? w : Bukkit.getWorlds().get(0);
     }
-    public World getSpeedrunWorld()            { return Bukkit.getWorld(speedrunWorldName); }
-    public String getHealingWorldName()        { return healingWorldName; }
-    public String getSpeedrunWorldName()       { return speedrunWorldName; }
-    public long getCurrentSpeedrunSeed()       { return currentSpeedrunSeed; }
-    public String getHealingDisplayName()      { return plugin.getConfig().getString("healing-world.display-name", "§a힐링 월드"); }
-    public String getSpeedrunDisplayName()     { return plugin.getConfig().getString("speedrun-world.display-name", "§c스피드런 월드"); }
+
+    public World getSpeedrunWorld() { return Bukkit.getWorld(speedrunWorldName); }
+    public String getHealingWorldName() { return healingWorldName; }
+    public String getSpeedrunWorldName() { return speedrunWorldName; }
+    public long getCurrentSpeedrunSeed() { return currentSpeedrunSeed; }
 }
