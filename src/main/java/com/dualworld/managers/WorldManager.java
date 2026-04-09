@@ -123,47 +123,6 @@ public class WorldManager {
                 base.getYaw(), base.getPitch());
     }
 
-    // ─── FIX #3: 포털 이동 처리 (PlayerPortalListener에서 호출) ────────
-    /**
-     * 플레이어가 포털을 통과할 때 올바른 목적지 월드를 반환.
-     * 힐링/스피드런이 서로 섞이지 않도록 강제 라우팅.
-     *
-     * @param fromWorld 현재 월드
-     * @param portalType 포털 종류 (NETHER/END)
-     * @return 이동할 목적지 월드, null이면 기본 동작
-     */
-    public World resolvePortalDestination(World fromWorld, PortalType portalType) {
-        String name = fromWorld.getName();
-        boolean isSpeedrunRelated = name.startsWith(speedrunWorldName);
-
-        if (portalType == PortalType.NETHER) {
-            if (isSpeedrunRelated) {
-                // 스피드런 계열 → 스피드런 네더 ↔ 스피드런 오버월드
-                if (name.equals(speedrunWorldName + "_nether")) {
-                    return Bukkit.getWorld(speedrunWorldName);         // 네더 → 오버월드
-                } else {
-                    return Bukkit.getWorld(speedrunWorldName + "_nether"); // 오버월드 → 네더
-                }
-            } else {
-                // 힐링 계열 → 힐링 네더 ↔ 힐링 오버월드
-                // 힐링 네더는 Bukkit 기본 규칙(world_nether)을 따름 → null 반환(기본처리)
-                return null;
-            }
-        } else if (portalType == PortalType.END) {
-            if (isSpeedrunRelated) {
-                if (name.equals(speedrunWorldName + "_the_end")) {
-                    return Bukkit.getWorld(speedrunWorldName);            // 엔드 → 오버월드
-                } else {
-                    return Bukkit.getWorld(speedrunWorldName + "_the_end"); // 오버월드 → 엔드
-                }
-            } else {
-                // 힐링 엔드는 기본 처리
-                return null;
-            }
-        }
-        return null;
-    }
-
     // ─── 리셋 ────────────────────────────────────────────────────
     public void triggerResetWithCountdown(String killerName) {
         if (resetInProgress) return;

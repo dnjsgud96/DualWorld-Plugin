@@ -2,7 +2,7 @@ package com.dualworld.listeners;
 
 import com.dualworld.DualWorldPlugin;
 import org.bukkit.Location;
-import org.bukkit.PortalType;
+import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -11,11 +11,9 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerPortalEvent;
 
 /**
- * FIX #3: 힐링 월드 ↔ 스피드런 월드 간 포털이 엉키지 않도록
- * 포털 이동 목적지를 각 월드 계열 안에서만 라우팅.
- *
- * 스피드런 계열: speedrun_world / speedrun_world_nether / speedrun_world_the_end
- * 힐링 계열:    world / world_nether / world_the_end (버킷 기본)
+ * FIX #3: 힐링 ↔ 스피드런 포털 격리.
+ * 1.12.2 API에는 PortalType.END / PlayerPortalEvent#getType() 이 없으므로
+ * 현재 월드의 Environment 로 포털 종류를 판별합니다.
  */
 public class PlayerPortalListener implements Listener {
 
@@ -27,78 +25,95 @@ public class PlayerPortalListener implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onPlayerPortal(PlayerPortalEvent event) {
-        Player player = event.getPlayer();
-        World fromWorld = player.getWorld();
-        PortalType portalType = event.getType();
+        Player player    = event.getPlayer();
+        World  fromWorld = player.getWorld();
+        World.Environment env = fromWorld.getEnvironment();
 
-        // WorldManager에서 올바른 목적지 월드를 결정
-        World destWorld = plugin.getWorldManager().resolvePortalDestination(fromWorld, portalType);
-        if (destWorld == null) {
-            // null → 기본 Bukkit 포털 동작 허용 (힐링 계열 등)
+        String speedrunBase = plugin.getWorldManager().getSpeedrunWorldName();
+        boolean isSpeedrun  = fromWorld.getName().startsWith(speedrunBase);
+
+        // 힐링 계열이면 Bukkit 기본 동작에 맡김
+        if (!isSpeedrun) return;
+
+        // ── 스피드런 계열 포털 강제 라우팅 ──────────────────────────
+        World dest;
+        boolean isEnd = (env == World.Environment.THE_END);
+
+        if (isEnd) {
+            // 엔드 -> 스피드런 오버월드
+            dest = plugin.getServer().getWorld(speedrunBase);
+        } else if (env == World.Environment.NETHER) {
+            // 네더 -> 스피드런 오버월드
+            dest = plugin.getServer().getWorld(speedrunBase);
+        } else {
+            // 오버월드: event.getTo() 월드의 Environment 로 목적지 추론
+            Location toLocation = event.getTo();
+            if (toLocation != null && toLocation.getWorld() != null) {
+                World.Environment toEnv = toLocation.getWorld().getEnvironment();
+                if (toEnv == World.Environment.NETHER) {
+                    dest = plugin.getServer().getWorld(speedrunBase + "_nether");
+                } else if (toEnv == World.Environment.THE_END) {
+                    dest = plugin.getServer().getWorld(speedrunBase + "_the_end");
+                } else {
+                    return; // 이미 올바른 월드
+                }
+            } else {
+                return;
+            }
+        }
+
+        if (dest == null) {
+            player.sendMessage(plugin.getPrefix() + "§c목적지 월드를 찾을 수 없습니다.");
+            event.setCancelled(true);
             return;
         }
 
-        // 목적지가 확정된 경우 → 이벤트를 취소하고 수동으로 안전 위치 텔레포트
         event.setCancelled(true);
 
-        Location dest;
-        if (portalType == PortalType.END) {
-            // 엔드 출구 → 오버월드 스폰, 엔드 입구 → 엔드 스폰
-            dest = plugin.getWorldManager().getSafeSpawnLocation(destWorld);
+        Location safeDest;
+        if (isEnd) {
+            safeDest = plugin.getWorldManager().getSafeSpawnLocation(dest);
         } else {
-            // 네더 포털: 비율 계산(8:1) 후 안전 위치
             Location from = player.getLocation();
-            double scale = fromWorld.getEnvironment() == World.Environment.NETHER ? 8.0 : 1.0 / 8.0;
-            Location scaled = new Location(destWorld,
+            double scale  = (env == World.Environment.NETHER) ? 8.0 : (1.0 / 8.0);
+            Location scaled = new Location(dest,
                     from.getX() * scale,
                     from.getY(),
                     from.getZ() * scale);
-            dest = findSafeNetherPortalLocation(destWorld, scaled);
+            safeDest = findSafeNetherLocation(dest, scaled);
         }
 
-        player.teleport(dest);
-
-        // 스피드런 월드 진입 기록
-        if (plugin.getWorldManager().isInSpeedrunWorld(player)
-                && !plugin.getTimerManager().isRunning()) {
-            plugin.getTimerManager().startTimer();
-        }
+        player.teleport(safeDest);
     }
 
-    /**
-     * 네더 포털 목적지 근처에서 안전한 위치를 찾아 반환.
-     * 기존 포털 블록이 있으면 그 앞을 반환, 없으면 WorldManager의 getSafeSpawnLocation 사용.
-     */
-    private Location findSafeNetherPortalLocation(World destWorld, Location approximate) {
-        int searchRadius = 16;
+    private Location findSafeNetherLocation(World world, Location approximate) {
         int bx = approximate.getBlockX();
         int bz = approximate.getBlockZ();
+        int searchRadius = 16;
 
-        // approximate 주변에서 포털 프레임(OBSIDIAN) 탐색
         for (int dx = -searchRadius; dx <= searchRadius; dx++) {
             for (int dz = -searchRadius; dz <= searchRadius; dz++) {
-                for (int y = 1; y < destWorld.getMaxHeight() - 2; y++) {
-                    org.bukkit.block.Block b = destWorld.getBlockAt(bx + dx, y, bz + dz);
-                    if (b.getType() == org.bukkit.Material.PORTAL) {
-                        // 포털 블록 발견 → 그 앞 공기 위치
-                        Location candidate = new Location(destWorld,
+                for (int y = 1; y < world.getMaxHeight() - 2; y++) {
+                    org.bukkit.block.Block b = world.getBlockAt(bx + dx, y, bz + dz);
+                    if (b.getType() == Material.PORTAL) {
+                        Location candidate = new Location(world,
                                 bx + dx + 0.5, y, bz + dz + 0.5);
                         if (isSafe(candidate)) return candidate;
                     }
                 }
             }
         }
-
-        // 포털을 못 찾으면 월드 안전 스폰
-        return plugin.getWorldManager().getSafeSpawnLocation(destWorld);
+        return plugin.getWorldManager().getSafeSpawnLocation(world);
     }
 
     private boolean isSafe(Location loc) {
-        org.bukkit.block.Block feet  = loc.getBlock();
-        org.bukkit.block.Block head  = loc.getWorld().getBlockAt(loc.getBlockX(), loc.getBlockY() + 1, loc.getBlockZ());
-        org.bukkit.block.Block floor = loc.getWorld().getBlockAt(loc.getBlockX(), loc.getBlockY() - 1, loc.getBlockZ());
-        return (feet.getType() == org.bukkit.Material.AIR || feet.getType() == org.bukkit.Material.PORTAL)
-                && (head.getType() == org.bukkit.Material.AIR || head.getType() == org.bukkit.Material.PORTAL)
-                && floor.getType().isSolid();
+        World w = loc.getWorld();
+        int x = loc.getBlockX(), y = loc.getBlockY(), z = loc.getBlockZ();
+        Material feet  = w.getBlockAt(x, y,     z).getType();
+        Material head  = w.getBlockAt(x, y + 1, z).getType();
+        Material floor = w.getBlockAt(x, y - 1, z).getType();
+        return (feet  == Material.AIR || feet  == Material.PORTAL)
+            && (head  == Material.AIR || head  == Material.PORTAL)
+            && floor.isSolid();
     }
 }
