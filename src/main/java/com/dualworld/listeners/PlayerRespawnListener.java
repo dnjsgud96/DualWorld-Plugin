@@ -21,25 +21,27 @@ public class PlayerRespawnListener implements Listener {
     public void onPlayerRespawn(PlayerRespawnEvent event) {
         Player player = event.getPlayer();
 
-        // Only intercept if this player died in speedrun world
+        // 스피드런 월드에서 사망한 플레이어만 처리
         if (!plugin.getWorldManager().isPendingRespawn(player.getUniqueId())) return;
 
         plugin.getWorldManager().removePendingRespawn(player.getUniqueId());
 
-        // Force respawn into healing world
+        // 힐링 월드로 강제 리스폰
         World hw = plugin.getWorldManager().getHealingWorld();
         Location dest = plugin.getPlayerDataManager().getLastHealingLocation(player);
-        if (dest == null || dest.getWorld() == null) dest = hw.getSpawnLocation();
+
+        // FIX #4: 저장 위치가 없거나 유효하지 않으면 안전 스폰 사용
+        if (dest == null || dest.getWorld() == null) {
+            dest = plugin.getWorldManager().getSafeSpawnLocation(hw);
+        }
 
         event.setRespawnLocation(dest);
 
-        // Load healing data after a tick (inventory etc.)
         final Location finalDest = dest;
-        final Player finalPlayer = player;
         org.bukkit.Bukkit.getScheduler().runTaskLater(plugin, () -> {
-            plugin.getPlayerDataManager().loadHealingData(finalPlayer);
-            plugin.getPlayerDataManager().setCurrentWorld(finalPlayer, "healing");
-            finalPlayer.sendMessage(plugin.getPrefix() + "§a힐링 월드로 리스폰되었습니다.");
+            plugin.getPlayerDataManager().loadHealingData(player);
+            plugin.getPlayerDataManager().setCurrentWorld(player, "healing");
+            player.sendMessage(plugin.getPrefix() + "§a힐링 월드로 리스폰되었습니다.");
         }, 1L);
     }
 }

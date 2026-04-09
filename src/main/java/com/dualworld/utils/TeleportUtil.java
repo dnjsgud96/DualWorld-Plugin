@@ -10,7 +10,7 @@ import org.bukkit.entity.Player;
 public class TeleportUtil {
 
     public static void teleportToHealing(Player p, DualWorldPlugin plugin) {
-        WorldManager wm   = plugin.getWorldManager();
+        WorldManager wm       = plugin.getWorldManager();
         PlayerDataManager pdm = plugin.getPlayerDataManager();
 
         if (wm.isInHealingWorld(p)) {
@@ -22,7 +22,10 @@ public class TeleportUtil {
         pdm.loadHealingData(p);
 
         Location dest = pdm.getLastHealingLocation(p);
-        if (dest == null || dest.getWorld() == null) dest = wm.getHealingWorld().getSpawnLocation();
+        // FIX #4: 저장 위치가 없으면 안전 스폰 사용
+        if (dest == null || dest.getWorld() == null) {
+            dest = wm.getSafeSpawnLocation(wm.getHealingWorld());
+        }
 
         p.teleport(dest);
         pdm.setCurrentWorld(p, "healing");
@@ -31,7 +34,7 @@ public class TeleportUtil {
     }
 
     public static void teleportToSpeedrun(Player p, DualWorldPlugin plugin) {
-        WorldManager wm   = plugin.getWorldManager();
+        WorldManager wm       = plugin.getWorldManager();
         PlayerDataManager pdm = plugin.getPlayerDataManager();
 
         if (wm.isInSpeedrunWorld(p)) {
@@ -50,18 +53,24 @@ public class TeleportUtil {
         }
 
         pdm.saveHealingData(p);
+
+        // FIX #1 연계: 리셋 후라면 스피드런 저장 데이터가 없으므로 loadSpeedrunData가 빈 상태로 시작함
         pdm.loadSpeedrunData(p);
 
+        // FIX #4: 스피드런 저장 위치가 있어도 해당 월드가 유효한지 재확인
         Location dest = pdm.getLastSpeedrunLocation(p);
-        if (dest == null || dest.getWorld() == null || !dest.getWorld().getName().contains(wm.getSpeedrunWorldName()))
-            dest = sw.getSpawnLocation();
+        if (dest == null
+                || dest.getWorld() == null
+                || !dest.getWorld().getName().startsWith(wm.getSpeedrunWorldName())) {
+            // 저장 위치 없음 or 이전 시드 월드 → 안전 스폰으로 이동
+            dest = wm.getSafeSpawnLocation(sw);
+        }
 
         p.teleport(dest);
         pdm.setCurrentWorld(p, "speedrun");
         p.sendMessage(plugin.getMessage("moved-to-speedrun"));
         p.sendTitle(wm.getSpeedrunDisplayName(), "§c주의: 사망 시 월드 리셋!", 10, 60, 20);
 
-        // Record join stat + start timer on first arrival
         plugin.getStatsManager().recordSpeedrunJoin(p);
         if (!plugin.getTimerManager().isRunning()) {
             plugin.getTimerManager().startTimer();

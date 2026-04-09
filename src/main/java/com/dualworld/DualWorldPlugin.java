@@ -3,9 +3,10 @@ package com.dualworld;
 import com.dualworld.commands.DualWorldCommand;
 import com.dualworld.commands.HealingCommand;
 import com.dualworld.commands.SpeedrunCommand;
+import com.dualworld.listeners.EntityDeathListener;
 import com.dualworld.listeners.PlayerDeathListener;
 import com.dualworld.listeners.PlayerJoinListener;
-import com.dualworld.listeners.EntityDeathListener;
+import com.dualworld.listeners.PlayerPortalListener;
 import com.dualworld.listeners.PlayerQuitListener;
 import com.dualworld.listeners.PlayerRespawnListener;
 import com.dualworld.managers.PlayerDataManager;
@@ -41,10 +42,12 @@ public class DualWorldPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new PlayerDeathListener(this),   this);
         getServer().getPluginManager().registerEvents(new PlayerRespawnListener(this), this);
         getServer().getPluginManager().registerEvents(new PlayerJoinListener(this),    this);
-        getServer().getPluginManager().registerEvents(new EntityDeathListener(this), this);
+        getServer().getPluginManager().registerEvents(new EntityDeathListener(this),   this);
         getServer().getPluginManager().registerEvents(new PlayerQuitListener(this),    this);
+        // FIX #3: 포털 격리 리스너 등록
+        getServer().getPluginManager().registerEvents(new PlayerPortalListener(this),  this);
 
-        getLogger().info("DualWorld v2.0.0 활성화!");
+        getLogger().info("DualWorld v2.1.0 활성화!");
     }
 
     @Override

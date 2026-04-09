@@ -6,6 +6,7 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.potion.PotionEffect;
 
 import java.io.File;
@@ -65,27 +66,72 @@ public class PlayerDataManager {
         return getLocation(getCfg(p), "speedrun");
     }
 
+    /**
+     * FIX #1: 월드 리셋 시 모든 플레이어의 스피드런 저장 데이터를 완전히 삭제.
+     * 다음 스피드런 진입 시 빈 인벤토리/기본 스탯으로 시작하게 됨.
+     */
+    public void clearSpeedrunData(Player p) {
+        FileConfiguration cfg = getCfg(p);
+        cfg.set("speedrun", null);   // speedrun 섹션 전체 제거
+        saveCfg(p, cfg);
+    }
+
+    /** 모든 온라인 플레이어의 스피드런 데이터 삭제 (리셋 시 호출) */
+    public void clearAllSpeedrunData() {
+        // 온라인 플레이어
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            clearSpeedrunData(p);
+        }
+        // 오프라인 플레이어 파일도 정리
+        File[] files = dataFolder.listFiles((d, n) -> n.endsWith(".yml"));
+        if (files == null) return;
+        for (File f : files) {
+            FileConfiguration cfg = YamlConfiguration.loadConfiguration(f);
+            cfg.set("speedrun", null);
+            try { cfg.save(f); } catch (IOException e) { /* ignore */ }
+        }
+    }
+
     // ─── Core serialization ───────────────────────────────────────
+
+    /**
+     * FIX #2: 왼손(offhand) 슬롯 포함 전체 인벤토리 저장.
+     */
     private void saveState(Player p, FileConfiguration cfg, String prefix) {
-        // Inventory
+        PlayerInventory inv = p.getInventory();
+
+        // 인벤토리 (0-35 메인, 36-39 방어구, 40 오프핸드)
         cfg.set(prefix + ".inventory", null);
+        ItemStack[] contents = inv.getContents(); // 0~35
+        for (int i = 0; i < contents.length; i++) {
+            if (contents[i] != null) cfg.set(prefix + ".inventory." + i, contents[i]);
+        }
+
+        // 방어구 (0=부츠, 1=레깅스, 2=흉갑, 3=투구)
         cfg.set(prefix + ".armor", null);
-        ItemStack[] inv   = p.getInventory().getContents();
-        ItemStack[] armor = p.getInventory().getArmorContents();
-        for (int i = 0; i < inv.length; i++)   if (inv[i]   != null) cfg.set(prefix + ".inventory." + i, inv[i]);
-        for (int i = 0; i < armor.length; i++) if (armor[i] != null) cfg.set(prefix + ".armor." + i,     armor[i]);
+        ItemStack[] armor = inv.getArmorContents();
+        for (int i = 0; i < armor.length; i++) {
+            if (armor[i] != null) cfg.set(prefix + ".armor." + i, armor[i]);
+        }
 
-        // Stats — each world stores independently
-        cfg.set(prefix + ".health",      p.getHealth());
-        cfg.set(prefix + ".maxHealth",   p.getMaxHealth());
-        cfg.set(prefix + ".food",        p.getFoodLevel());
-        cfg.set(prefix + ".saturation",  (double) p.getSaturation());
-        cfg.set(prefix + ".exp",         (double) p.getExp());
-        cfg.set(prefix + ".level",       p.getLevel());
-        cfg.set(prefix + ".totalExp",    p.getTotalExperience());
-        cfg.set(prefix + ".gamemode",    p.getGameMode().name());
+        // FIX #2: 오프핸드(왼손) 저장
+        cfg.set(prefix + ".offhand", null);
+        ItemStack offhand = inv.getItemInOffHand();
+        if (offhand != null && offhand.getType() != Material.AIR) {
+            cfg.set(prefix + ".offhand", offhand);
+        }
 
-        // Potion effects
+        // 스탯
+        cfg.set(prefix + ".health",     p.getHealth());
+        cfg.set(prefix + ".maxHealth",  p.getMaxHealth());
+        cfg.set(prefix + ".food",       p.getFoodLevel());
+        cfg.set(prefix + ".saturation", (double) p.getSaturation());
+        cfg.set(prefix + ".exp",        (double) p.getExp());
+        cfg.set(prefix + ".level",      p.getLevel());
+        cfg.set(prefix + ".totalExp",   p.getTotalExperience());
+        cfg.set(prefix + ".gamemode",   p.getGameMode().name());
+
+        // 포션 효과
         cfg.set(prefix + ".effects", null);
         int idx = 0;
         for (PotionEffect effect : p.getActivePotionEffects()) {
@@ -95,7 +141,7 @@ public class PlayerDataManager {
             idx++;
         }
 
-        // Location
+        // 위치
         Location loc = p.getLocation();
         cfg.set(prefix + ".loc.world", loc.getWorld().getName());
         cfg.set(prefix + ".loc.x",     loc.getX());
@@ -106,24 +152,44 @@ public class PlayerDataManager {
     }
 
     private void loadState(Player p, FileConfiguration cfg, String prefix) {
-        if (!cfg.contains(prefix)) return;
+        PlayerInventory inv = p.getInventory();
 
-        // Clear everything first
-        p.getInventory().clear();
-        p.getInventory().setArmorContents(new ItemStack[4]);
+        // 전체 초기화
+        inv.clear();
+        inv.setArmorContents(new ItemStack[4]);
+        inv.setItemInOffHand(null);
         for (PotionEffect effect : p.getActivePotionEffects())
             p.removePotionEffect(effect.getType());
 
-        // Inventory
+        if (!cfg.contains(prefix)) {
+            // 저장 데이터 없음 → 깨끗한 상태(빈 인벤토리, 풀 체력)로 시작
+            p.setMaxHealth(20.0);
+            p.setHealth(20.0);
+            p.setFoodLevel(20);
+            p.setSaturation(5.0f);
+            p.setExp(0f);
+            p.setLevel(0);
+            p.setTotalExperience(0);
+            p.setGameMode(GameMode.SURVIVAL);
+            return;
+        }
+
+        // 메인 인벤토리
         for (int i = 0; i < 36; i++) {
             ItemStack item = cfg.getItemStack(prefix + ".inventory." + i);
-            if (item != null) p.getInventory().setItem(i, item);
+            if (item != null) inv.setItem(i, item);
         }
+
+        // 방어구
         ItemStack[] armor = new ItemStack[4];
         for (int i = 0; i < 4; i++) armor[i] = cfg.getItemStack(prefix + ".armor." + i);
-        p.getInventory().setArmorContents(armor);
+        inv.setArmorContents(armor);
 
-        // Stats
+        // FIX #2: 오프핸드 복원
+        ItemStack offhand = cfg.getItemStack(prefix + ".offhand");
+        if (offhand != null) inv.setItemInOffHand(offhand);
+
+        // 스탯
         double maxHp = cfg.getDouble(prefix + ".maxHealth", 20.0);
         p.setMaxHealth(maxHp);
         double hp = cfg.getDouble(prefix + ".health", maxHp);
@@ -138,13 +204,14 @@ public class PlayerDataManager {
         try { p.setGameMode(GameMode.valueOf(gm)); }
         catch (IllegalArgumentException e) { p.setGameMode(GameMode.SURVIVAL); }
 
-        // Potion effects
+        // 포션 효과
         if (cfg.contains(prefix + ".effects")) {
             for (String key : cfg.getConfigurationSection(prefix + ".effects").getKeys(false)) {
                 String typeName = cfg.getString(prefix + ".effects." + key + ".type");
                 int duration    = cfg.getInt(prefix + ".effects." + key + ".duration");
                 int amplifier   = cfg.getInt(prefix + ".effects." + key + ".amplifier");
-                org.bukkit.potion.PotionEffectType type = org.bukkit.potion.PotionEffectType.getByName(typeName);
+                org.bukkit.potion.PotionEffectType type =
+                        org.bukkit.potion.PotionEffectType.getByName(typeName);
                 if (type != null) p.addPotionEffect(new PotionEffect(type, duration, amplifier));
             }
         }
