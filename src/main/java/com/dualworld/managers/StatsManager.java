@@ -78,6 +78,45 @@ public class StatsManager {
         save();
     }
 
+    // ─── 기록 초기화 ──────────────────────────────────────────────
+
+    /** 모든 플레이어 기록 + 서버 전역 기록 전부 삭제 */
+    public void clearAllStats() {
+        cfg.set("players", null);
+        cfg.set("global", null);
+        save();
+    }
+
+    /** 서버 전역 기록(최고기록·클리어수)만 삭제 */
+    public void clearGlobalStats() {
+        cfg.set("global.bestTime", null);
+        cfg.set("global.totalFinishes", null);
+        save();
+    }
+
+    /** UUID로 특정 플레이어 기록 삭제 */
+    public void clearPlayerStats(UUID id) {
+        cfg.set("players." + id, null);
+        save();
+    }
+
+    /**
+     * 이름으로 특정 플레이어 기록 삭제 (오프라인 포함).
+     * @return 찾아서 삭제했으면 true, 없으면 false
+     */
+    public boolean clearPlayerStatsByName(String name) {
+        if (!cfg.contains("players")) return false;
+        for (String idStr : cfg.getConfigurationSection("players").getKeys(false)) {
+            String storedName = cfg.getString("players." + idStr + ".name", "");
+            if (storedName.equalsIgnoreCase(name)) {
+                cfg.set("players." + idStr, null);
+                save();
+                return true;
+            }
+        }
+        return false;
+    }
+
     // ─── Getters ──────────────────────────────────────────────────
     public int getJoins(UUID id)    { return cfg.getInt(key(id, "joins"),    0); }
     public int getDeaths(UUID id)   { return cfg.getInt(key(id, "deaths"),   0); }

@@ -25,15 +25,16 @@ public class DualWorldCommand implements CommandExecutor {
         if (args.length == 0) { sendHelp(sender); return true; }
 
         switch (args[0].toLowerCase()) {
-            case "help":      sendHelp(sender);                              break;
-            case "healing":   requirePlayer(sender, () -> TeleportUtil.teleportToHealing((Player) sender, plugin));  break;
-            case "speedrun":  requirePlayer(sender, () -> TeleportUtil.teleportToSpeedrun((Player) sender, plugin)); break;
-            case "where":     requirePlayer(sender, () -> sendWhere((Player) sender));   break;
-            case "status":    sendStatus(sender);                            break;
-            case "timer":     requirePlayer(sender, () -> handleTimer((Player) sender, args)); break;
-            case "stats":     handleStats(sender, args);                     break;
-            case "reset":     handleReset(sender);                           break;
-            case "setdifficulty": handleSetDiff(sender, args);               break;
+            case "help":         sendHelp(sender);                                                        break;
+            case "healing":      requirePlayer(sender, () -> TeleportUtil.teleportToHealing((Player) sender, plugin));  break;
+            case "speedrun":     requirePlayer(sender, () -> TeleportUtil.teleportToSpeedrun((Player) sender, plugin)); break;
+            case "where":        requirePlayer(sender, () -> sendWhere((Player) sender));                 break;
+            case "status":       sendStatus(sender);                                                      break;
+            case "timer":        requirePlayer(sender, () -> handleTimer((Player) sender, args));         break;
+            case "stats":        handleStats(sender, args);                                               break;
+            case "reset":        handleReset(sender);                                                     break;
+            case "clearstats":   handleClearStats(sender, args);                                          break;
+            case "setdifficulty":handleSetDiff(sender, args);                                             break;
             case "reload":
                 requireAdmin(sender, () -> {
                     plugin.reloadConfig();
@@ -50,7 +51,7 @@ public class DualWorldCommand implements CommandExecutor {
     private void sendHelp(CommandSender s) {
         String p = plugin.getPrefix();
         s.sendMessage("§8§m════════════════════════════════════");
-        s.sendMessage(p + "§6DualWorld v2.0 §7명령어 도움말");
+        s.sendMessage(p + "§6DualWorld v2.1 §7명령어 도움말");
         s.sendMessage("§8§m════════════════════════════════════");
         s.sendMessage("§e/healing §8│ §e/dw healing    §7힐링 월드로 이동");
         s.sendMessage("§e/speedrun §8│ §e/dw speedrun   §7스피드런 월드로 이동");
@@ -61,12 +62,15 @@ public class DualWorldCommand implements CommandExecutor {
         s.sendMessage("§e/dw stats                  §7내 스피드런 통계");
         s.sendMessage("§e/dw stats top              §7전체 랭킹 보기");
         s.sendMessage("§e/dw stats all              §7전체 플레이어 통계");
-        s.sendMessage("§e/dw stats copy             §7통계 복사용 텍스트");
+        s.sendMessage("§e/dw stats <플레이어명>      §7특정 플레이어 통계");
         if (s.hasPermission("dualworld.admin")) {
             s.sendMessage("§8--- §c관리자 §8---");
-            s.sendMessage("§e/dw reset               §c스피드런 월드 강제 리셋");
+            s.sendMessage("§e/dw reset                  §c스피드런 월드 강제 리셋");
+            s.sendMessage("§e/dw clearstats all         §c전체 기록 초기화");
+            s.sendMessage("§e/dw clearstats global      §c서버 최고기록만 초기화");
+            s.sendMessage("§e/dw clearstats <플레이어명> §c특정 플레이어 기록 초기화");
             s.sendMessage("§e/dw setdifficulty <healing|speedrun> <난이도>");
-            s.sendMessage("§e/dw reload              §7설정 재로드");
+            s.sendMessage("§e/dw reload                 §7설정 재로드");
         }
         s.sendMessage("§8§m════════════════════════════════════");
     }
@@ -100,7 +104,6 @@ public class DualWorldCommand implements CommandExecutor {
         s.sendMessage(prefix + "§6DualWorld 서버 현황");
         s.sendMessage("§8§m════════════════════════════════════");
 
-        // Healing world
         World hw = wm.getHealingWorld();
         List<String> healPlayers = Bukkit.getOnlinePlayers().stream()
                 .filter(wm::isInHealingWorld).map(Player::getName).collect(Collectors.toList());
@@ -110,7 +113,6 @@ public class DualWorldCommand implements CommandExecutor {
 
         s.sendMessage("");
 
-        // Speedrun world
         World sw = wm.getSpeedrunWorld();
         List<String> srPlayers = Bukkit.getOnlinePlayers().stream()
                 .filter(wm::isInSpeedrunWorld).map(Player::getName).collect(Collectors.toList());
@@ -142,14 +144,14 @@ public class DualWorldCommand implements CommandExecutor {
         switch (args[1].toLowerCase()) {
             case "hud":
                 boolean on = tm.toggleHud(p);
-                p.sendMessage(prefix + "§7타이머 HUD: " + (on ? "§a켜짐 §7(우측 상단 ActionBar)" : "§c꺼짐"));
+                p.sendMessage(prefix + "§7타이머 HUD: " + (on ? "§a켜짐 §7(ActionBar 표시)" : "§c꺼짐"));
                 break;
             case "time":
                 if (!tm.isRunning()) p.sendMessage(prefix + "§7타이머가 실행 중이 아닙니다.");
                 else p.sendMessage(prefix + "§7현재 기록: " + StatsManager.formatTime(tm.getElapsedMs()));
                 break;
             default:
-                p.sendMessage(prefix + "§c알 수 없는 옵션: §e/dw timer hud §7또는 §e/dw timer time");
+                p.sendMessage(prefix + "§c알 수 없는 옵션. §e/dw timer hud §7또는 §e/dw timer time");
         }
     }
 
@@ -159,25 +161,22 @@ public class DualWorldCommand implements CommandExecutor {
         StatsManager sm = plugin.getStatsManager();
 
         if (args.length < 2) {
-            if (!(sender instanceof Player)) { sender.sendMessage("서브커맨드 필요: top, all, copy"); return; }
+            if (!(sender instanceof Player)) { sender.sendMessage("서브커맨드 필요: top, all"); return; }
             sendMyStats((Player) sender);
             return;
         }
 
         switch (args[1].toLowerCase()) {
-            case "top":     sendTopStats(sender);  break;
-            case "all":     sendAllStats(sender);  break;
-            case "copy":
-                requirePlayer(sender, () -> sendCopyStats((Player) sender));
-                break;
+            case "top":  sendTopStats(sender); break;
+            case "all":  sendAllStats(sender); break;
             default:
-                // /dw stats <playername> — admin can look up others
-                if (sender.hasPermission("dualworld.admin") && args[1].length() > 0) {
-                    Player target = Bukkit.getPlayer(args[1]);
-                    if (target != null) sendOtherStats(sender, target);
-                    else sender.sendMessage(prefix + "§c플레이어를 찾을 수 없습니다.");
+                // 플레이어 이름으로 검색
+                Player target = Bukkit.getPlayer(args[1]);
+                if (target != null) {
+                    sendOtherStats(sender, target);
                 } else {
-                    sender.sendMessage(prefix + "§c사용법: §e/dw stats [top|all|copy]");
+                    sender.sendMessage(prefix + "§c플레이어를 찾을 수 없습니다: §e" + args[1]);
+                    sender.sendMessage(prefix + "§7사용법: §e/dw stats [top|all|<플레이어명>]");
                 }
         }
     }
@@ -221,9 +220,6 @@ public class DualWorldCommand implements CommandExecutor {
         s.sendMessage("§8§m════════════════════════════════════");
         s.sendMessage(prefix + "§6🏆 스피드런 랭킹 (최고기록 기준)");
         s.sendMessage("§8§m════════════════════════════════════");
-        s.sendMessage(String.format("§8%-3s %-16s %-10s %-10s %-10s %-14s",
-                "#", "닉네임", "참가", "사망", "클리어", "최고기록"));
-        s.sendMessage("§8§m────────────────────────────────────");
 
         List<StatsManager.PlayerStat> finished = list.stream()
                 .filter(st -> st.bestTime > 0).collect(Collectors.toList());
@@ -233,13 +229,12 @@ public class DualWorldCommand implements CommandExecutor {
         int rank = 1;
         for (StatsManager.PlayerStat st : finished) {
             String rankColor = rank == 1 ? "§6" : rank == 2 ? "§7" : rank == 3 ? "§c" : "§f";
-            s.sendMessage(String.format("%s%-3d §f%-16s §e%-10d §e%-10d §e%-10d %s",
-                    rankColor, rank++, st.name, st.joins, st.deaths, st.finishes,
-                    StatsManager.formatTime(st.bestTime)));
+            s.sendMessage(rankColor + rank++ + ". §f" + st.name
+                    + " §7│ " + StatsManager.formatTime(st.bestTime)
+                    + " §8│ §7참가 §e" + st.joins + " §7사망 §e" + st.deaths + " §7클리어 §e" + st.finishes);
         }
         for (StatsManager.PlayerStat st : noRecord) {
-            s.sendMessage(String.format("§8%-3s §7%-16s §8%-10d §8%-10d §8%-10d §8%-14s",
-                    "-", st.name, st.joins, st.deaths, st.finishes, "기록 없음"));
+            s.sendMessage("§8- §7" + st.name + " §8│ §7참가 §e" + st.joins + " §7사망 §e" + st.deaths + " §8│ 기록 없음");
         }
         if (list.isEmpty()) s.sendMessage("§7아직 기록이 없습니다.");
         s.sendMessage("§8§m════════════════════════════════════");
@@ -268,40 +263,6 @@ public class DualWorldCommand implements CommandExecutor {
         s.sendMessage("§8§m════════════════════════════════════");
     }
 
-    private void sendCopyStats(Player p) {
-        StatsManager sm = plugin.getStatsManager();
-        List<StatsManager.PlayerStat> list = sm.getAllStats();
-        StringBuilder sb = new StringBuilder();
-
-        sb.append("=== DualWorld 스피드런 통계 ===\n");
-        sb.append("서버 총 리셋: ").append(sm.getGlobalResets()).append("회\n");
-        sb.append("서버 총 클리어: ").append(sm.getGlobalFinishes()).append("회\n");
-        sb.append("서버 최고기록: ").append(formatTimePlain(sm.getGlobalBestTime())).append("\n");
-        sb.append("─────────────────────────────\n");
-        sb.append(String.format("%-16s %5s %5s %6s %14s\n", "닉네임", "참가", "사망", "클리어", "최고기록"));
-        for (StatsManager.PlayerStat st : list) {
-            sb.append(String.format("%-16s %5d %5d %6d %14s\n",
-                    st.name, st.joins, st.deaths, st.finishes, formatTimePlain(st.bestTime)));
-        }
-        sb.append("=== Generated by DualWorld ===");
-
-        // Send as chat message for easy copy
-        p.sendMessage("§8§m════════════════════════════════════");
-        p.sendMessage(plugin.getPrefix() + "§7아래 텍스트를 복사하세요:");
-        p.sendMessage("§8§m════════════════════════════════════");
-        for (String line : sb.toString().split("\n")) p.sendMessage("§f" + line);
-        p.sendMessage("§8§m════════════════════════════════════");
-    }
-
-    private String formatTimePlain(long ms) {
-        if (ms < 0) return "기록 없음";
-        long totalSec = ms / 1000;
-        long h = totalSec / 3600, m = (totalSec % 3600) / 60, s = totalSec % 60;
-        long ml = ms % 1000;
-        if (h > 0) return String.format("%d:%02d:%02d.%03d", h, m, s, ml);
-        return String.format("%d:%02d.%03d", m, s, ml);
-    }
-
     // ─── /dw reset ────────────────────────────────────────────────
     private void handleReset(CommandSender s) {
         requireAdmin(s, () -> {
@@ -311,6 +272,51 @@ public class DualWorldCommand implements CommandExecutor {
             }
             Bukkit.broadcastMessage(plugin.getPrefix() + "§c관리자에 의해 스피드런 월드 리셋!");
             plugin.getWorldManager().triggerResetWithCountdown("관리자");
+        });
+    }
+
+    // ─── /dw clearstats ───────────────────────────────────────────
+    private void handleClearStats(CommandSender s, String[] args) {
+        requireAdmin(s, () -> {
+            String prefix = plugin.getPrefix();
+            StatsManager sm = plugin.getStatsManager();
+
+            if (args.length < 2) {
+                s.sendMessage(prefix + "§c사용법:");
+                s.sendMessage(prefix + "§e/dw clearstats all         §7- 모든 플레이어 기록 + 서버 기록 초기화");
+                s.sendMessage(prefix + "§e/dw clearstats global      §7- 서버 최고기록·클리어수만 초기화");
+                s.sendMessage(prefix + "§e/dw clearstats <플레이어명> §7- 특정 플레이어 기록만 초기화");
+                return;
+            }
+
+            switch (args[1].toLowerCase()) {
+                case "all":
+                    sm.clearAllStats();
+                    Bukkit.broadcastMessage(prefix + "§c모든 스피드런 기록이 초기화되었습니다. §8(관리자: " + s.getName() + ")");
+                    break;
+
+                case "global":
+                    sm.clearGlobalStats();
+                    s.sendMessage(prefix + "§a서버 최고기록 및 총 클리어 수가 초기화되었습니다.");
+                    break;
+
+                default:
+                    // 플레이어 이름으로 초기화
+                    Player target = Bukkit.getPlayer(args[1]);
+                    if (target != null) {
+                        sm.clearPlayerStats(target.getUniqueId());
+                        s.sendMessage(prefix + "§a" + target.getName() + " §7님의 스피드런 기록을 초기화했습니다.");
+                        target.sendMessage(prefix + "§c관리자에 의해 스피드런 기록이 초기화되었습니다.");
+                    } else {
+                        // 오프라인 플레이어도 이름으로 검색
+                        boolean found = sm.clearPlayerStatsByName(args[1]);
+                        if (found) {
+                            s.sendMessage(prefix + "§a" + args[1] + " §7님의 스피드런 기록을 초기화했습니다.");
+                        } else {
+                            s.sendMessage(prefix + "§c플레이어를 찾을 수 없습니다: §e" + args[1]);
+                        }
+                    }
+            }
         });
     }
 
